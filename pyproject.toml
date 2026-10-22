@@ -4,12 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "campura-vision-plugin"
-version = "0.1.0"
-description = "Campura One offline single-camera vision prototype"
+version = "0.2.0"
+description = "Campura One independent optional plugin: local wait-time simulation"
 requires-python = ">=3.9"
+dependencies = []
 
 [project.scripts]
 campura-vision = "campura_vision.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+campura_vision = ["*.html", "*.css", "*.js"]

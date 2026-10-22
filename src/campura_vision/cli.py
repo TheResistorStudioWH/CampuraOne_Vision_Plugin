@@ -1,41 +1,42 @@
-"""Command-line entry point for a separate, optional local program."""
-
 import argparse
 import json
-from pathlib import Path
-
-from .analysis import Config
-from .demo import make_demo_video
-from .runner import analyze_file
-from .server import serve
-from .video import VideoError
+import sys
+from .estimator import InputError, estimate
+from .samples import NAMES, example
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Campura One 店内视觉分析离线原型")
-    sub = parser.add_subparsers(dest="command", required=True)
-    demo = sub.add_parser("make-demo", help="生成合法的自制模拟视频")
-    demo.add_argument("output", type=Path)
-    analyze = sub.add_parser("analyze", help="离线统计并输出本机 JSON")
-    analyze.add_argument("video", type=Path)
-    analyze.add_argument("--config", type=Path)
-    viewer = sub.add_parser("serve", help="打开本机预览和配置页面")
-    viewer.add_argument("video", type=Path)
-    viewer.add_argument("--port", type=int, default=0)
-    viewer.add_argument("--no-browser", action="store_true")
+def main():
+    parser = argparse.ArgumentParser(description='Campura One 独立插件 · 本地模拟试算')
+    commands = parser.add_subparsers(dest='command', required=True)
+    demo = commands.add_parser('example', help='输出带当前时间的模拟 JSON')
+    demo.add_argument('name', choices=NAMES, nargs='?', default='dining')
+    calc = commands.add_parser('estimate', help='读取模拟 JSON 文件并试算；- 表示标准输入')
+    calc.add_argument('file')
+    serve = commands.add_parser('serve', help='启动仅限本机的试算界面')
+    serve.add_argument('--port', type=int, default=0)
+    serve.add_argument('--open', action='store_true', help='打开系统浏览器')
     args = parser.parse_args()
     try:
-        if args.command == "make-demo":
-            make_demo_video(args.output)
-            print("模拟视频已生成：" + str(args.output))
-        elif args.command == "analyze":
-            config = Config.from_dict(json.loads(args.config.read_text())) if args.config else Config()
-            print(json.dumps(analyze_file(args.video, config).to_dict(), ensure_ascii=False, indent=2))
+        if args.command == 'serve':
+            from .server import serve as run
+            run(args.port, args.open)
+            return
+        if args.command == 'example':
+            output = example(args.name)
         else:
-            serve(args.video, args.port, not args.no_browser)
-    except (VideoError, ValueError) as error:
-        parser.exit(2, "错误：" + str(error) + "\n")
+            if args.file == '-':
+                raw = sys.stdin.read(512001)
+            else:
+                with open(args.file, encoding='utf-8') as stream:
+                    raw = stream.read(512001)
+            if len(raw.encode('utf-8')) > 512000:
+                raise InputError('输入超过 512 KB')
+            output = estimate(json.loads(raw))
+        print(json.dumps(output, ensure_ascii=False, indent=2, allow_nan=False))
+    except (InputError, ValueError, OSError) as error:
+        print('无法试算：' + str(error), file=sys.stderr)
+        raise SystemExit(2)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

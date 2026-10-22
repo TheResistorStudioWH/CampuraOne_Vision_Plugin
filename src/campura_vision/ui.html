@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Campura One · 等候时间试算</title><link rel="stylesheet" href="/style.css"><script defer src="/app.js"></script></head>
+<body>
+<header><div class="brand"><span class="mark">C</span><span>Campura One<small>可选视觉插件 · 独立原型</small></span></div><span class="pill">本机运行 · 0 云端请求</span></header>
+<main>
+<section class="intro"><div><p class="eyebrow">计算实验室 / 02</p><h1>等候时间试算</h1><p>看清现在的队伍，推演到店后的等待。</p></div><div class="notice"><strong>全部为模拟数据</strong><span>未连接摄像头、订单系统或学生端。这里展示计算规则，不代表真实门店预测。</span></div></section>
+<div id="error" role="alert" hidden></div>
+<div class="workspace">
+<aside class="panel controls"><h2>选择试算场景</h2><label for="scenario">场景预设</label><select id="scenario"></select><button id="load" class="secondary">加载场景</button><div class="divider"></div>
+<form id="form"><label for="arrival">地图预计路程 <span>分钟；单独显示</span></label><input id="arrival" type="number" min="0" max="120" step="0.5">
+<div id="dining-fields"><label for="prep">每单制作时长 <span>分钟</span></label><input id="prep" type="number" min="0.1" max="60" step="0.1"><label for="slots">同时制作单数</label><input id="slots" type="number" min="1" max="50" step="1"></div>
+<label id="service-label" for="service">每次点单时长 · 分钟</label><input id="service" type="number" min="0.05" max="10" step="0.05"><label for="service-slots">点单 / 收银工位数</label><input id="service-slots" type="number" min="1" max="20" step="1">
+<label for="waiting">当前待办交易数 <span>不含已服务中的交易</span></label><input id="waiting" type="number" min="0" max="500" step="1"><p class="help">这是独立的模拟交易队伍，不是把摄像头人数当成订单。</p>
+<label for="variation">服务时长上下浮动 <span>% · 情景假设</span></label><input id="variation" type="number" min="0" max="50" step="1">
+<button type="submit">应用参数并试算 <span aria-hidden="true">↗</span></button></form><button id="refresh" class="secondary">刷新模拟快照时间</button><p class="help">快照会真实过期。此按钮只刷新模拟时间，不会读取摄像头。</p></aside>
+<section class="results" aria-live="polite"><div class="section-heading"><h2>本次推演</h2><span id="updated">等待输入</span></div>
+<div id="metrics" class="metrics"></div><div id="cards" class="cards"></div>
+<section class="panel explanation"><div class="section-heading"><h2>这次计算依据</h2><span id="kind"></span></div><ul id="warnings"></ul><div id="selection"></div><details><summary>各数据源更新时间</summary><dl id="timestamps"></dl></details></section>
+<section class="panel advanced"><details><summary>高级输入 · 查看或修改完整模拟 JSON</summary><p class="help">可改订单事件、未来需求范围、机位覆盖和匿名时长样本。输入只保留在当前页面内存中。</p><label for="json-input" class="sr-only">完整模拟输入</label><textarea id="json-input" spellcheck="false"></textarea><button id="apply-json" class="secondary">使用这份 JSON 试算</button></details><details><summary>查看完整计算结果</summary><pre id="json-output"></pre></details></section>
+<p class="footnote">范围表示输入假设下的情景包络，不是统计置信区间。没有可靠依据时不显示总 ETA。</p>
+</section></div>
+</main><footer>Campura One Vision Plugin <span>独立仓库 · Windows / macOS 为目标平台 · 当前平台验证见 README</span></footer>
+</body></html>

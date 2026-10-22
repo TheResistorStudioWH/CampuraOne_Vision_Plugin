@@ -1,56 +1,60 @@
-# 架构与接口草案
+# 独立插件架构
 
-## 组件边界
+v0.2 当前能力、公式和输入以 [README](../README.md) 为准。以下明确区分已实现与拟接入。
+
+## 当前实现
 
 ```text
-本机文件／未来 USB、ONVIF-RTSP
-  → VideoSource（探测、解码、状态）
-  → Detector（可替换，输出框与脚点）
-  → 短时 Tracker（会话内 ID，不落盘）
-  → 过线和区域计数
-  → 127.0.0.1 配置／预览／结果接口
-  → 将来：经授权的商家端本地汇总接口
+浏览器试算界面 / CLI
+        │ 模拟 JSON
+        ▼
+本机 HTTP 边界（会话令牌、Host / Origin、大小约束）
+        │
+        ▼
+纯计算模块：去重 → 并行工位 → 有限未来情景 → 区间与降级原因
 ```
 
-当前 `LocalFileSource` 调用本机 `ffprobe` 探测，再以 `ffmpeg` 输出 160×90 RGB 帧。`BackgroundDifferenceDetector` 与 `Analyzer` 是示意算法；`Detector` 协议允许换成人体检测模型。断流后清除短时轨迹和队列即时值，累计进出数保持；重连不得把断流前后的两个人错误地连接为一个。
+全部代码在插件自己的 Git 仓库中。只依赖 Python 标准库，静态页面无 CDN 或远程字体。没有绑定任何模型供应商，没有采集/传出图像。只接受 `mode=simulation`；不会因传入一个真实 RTSP URL 就打开设备。
 
-## 视频输入适配计划
+已检查当前商家端：Flutter 的 Auth / Catalog / Marketing 等 Repository 为本地演示实现，没有现成的订单队列合同。学生端聚合商户浏览人数、商户地图路线也不是本插件现在可以直接消费的接口。后续必须与各自项目另行设计合同，不能把此处模拟字段当成生产 API。
 
-| 输入 | 接入与预览 | 故障诊断 | 当前状态 |
+## 产品形态与可选安装
+
+采用独立启动器 + 本机服务：商户主动下载，显式启动，主体商家端不依赖它。当前由 Python 进程启动系统浏览器；后续再封装桌面入口与托盘。Windows/macOS 都是正式目标，分别打包、签名并测试，不能从 macOS 测试推断 Windows 可用。
+
+可先评估 PyInstaller 封装运行时和网页资源，避免要求普通商户自行安装 Python。其[操作说明](https://pyinstaller.org/en/stable/operating-mode.html)要求围绕目标环境打包和检查依赖；当前尚未引入或构建。安装器负责每用户安装、唯一实例、停止采集再升级、配置版本迁移和失败回滚。macOS 还需签名、公证与相机用途描述；Windows 需核查签名和桌面相机访问设置。安装、启动、升级、卸载均未完成实机验收。
+
+未来发现协议草案：插件在当前用户的数据目录写入 `协议版本 + 进程标识 + 随机本机端口 + 支持能力`，按用户权限保护。商家端在用户明确启用插件后读取描述，经一次显式配对获取短期令牌，再检查进程存活、协议版本与 `/health`。退出清理描述，失效描述不得算作插件可用。不扫描局域网，不把长期通用 Token 放在固定公开 URL 中。当前没有实现该发现/配对，也没有修改 Flutter 客户端。
+
+## 后续视频输入适配层（未实现）
+
+统一接口拟为：`probe → open → frames → reconnect → close`。每帧带采集时刻、设备会话 ID、尺寸/像素格式；明确区分 `preview_available` 与 `analysis_available`。首帧超时、帧停滞和时间倒退都触发状态变更，不能继续展示旧画面为“实时”。
+
+| 输入 | 探测/配置 | 预览失败应显示的原因 | 重连 |
 | --- | --- | --- | --- |
-| 本地文件 | `ffprobe` 检查视频流，`ffmpeg` 输出固定尺寸画面；文件终止后状态为“播放结束” | 文件不存在／无读权限、探测失败或格式不支持、截断帧、解码异常 | 已实现并用模拟 MJPEG AVI 验证；其他编码待测 |
-| USB 摄像头 | Windows 用 Media Foundation 枚举和采集，macOS 用 AVFoundation；只预览设备实际提供的格式，确认相机占用状态 | 无设备、系统相机权限拒绝、设备占用、格式／分辨率不支持、首帧超时、热拔插 | 仅设计；未申请摄像头权限、未连接设备 |
-| ONVIF/RTSP | ONVIF 只用于发现能力和取得流地址，视频用 RTSP 接入；支持 TCP、超时、退避重连，记录最后成功帧时间 | 无网络、鉴权失败、流 URI 无效、端口拒绝、解码不支持、断流；如果设备无可用流应明确显示“无法预览”原因 | 仅设计；未连接网络摄像头 |
+| 合法本地视频 | 文件存在、读取权限、容器/编码、时间戳、可解码首帧 | 文件不可读/损坏/无视频轨/不支持编码；播放结束不是网络断流 | 手工重播开启新会话，计数重新开始 |
+| USB 相机 | 设备枚举、当前权限、占用状态、可用分辨率/帧率 | 权限拒绝、相机被占用/拔出、格式协商失败 | 有界指数退避；设备恢复后重新开流，不能复用旧轨迹 |
+| ONVIF + RTSP | ONVIF 用于发现和获取媒体配置，RTSP 负责取流；两者可独立支持 | 认证失败、DNS/网络/防火墙、RTSP 路径失效、不支持编码、TCP/UDP传输不兼容 | 明确状态/重试次数/下一次重试；认证失败不无限重试密码 |
 
-Windows 相机可通过 Media Foundation 枚举，macOS 相机访问需系统授权和用途说明：[微软设备枚举](https://learn.microsoft.com/en-us/windows/win32/medfound/enumerating-video-capture-devices)、[Apple 授权说明](https://developer.apple.com/documentation/AVFoundation/requesting-authorization-to-capture-and-save-media)。ONVIF Profile S 涵盖网络视频流能力，但设备具体实现仍需实测：[ONVIF Profile S](https://www.onvif.org/profiles/profile-s/)。
+示例状态：`idle / connecting / live / ended / reconnecting / permission_denied / authentication_failed / unsupported_format / failed`。错误需给商户可操作建议；避免将带用户名密码的 URL 打到日志或提交到 Git。未来设备凭据存 Windows Credential Manager / macOS Keychain，仓库只放脱敏配置 schema。当前未实现凭据存储。
 
-摄像头地址、密码、访问令牌不得出现在 Git、命令行参数、错误日志或商家端业务 API 中。后续用 Windows Credential Manager／macOS Keychain 保存凭据，并且只在用户主动配置后访问设备。原型当前仅接受本机视频文件路径；**不得把真实摄像头 URL 当文件路径输入**。
+Windows 评测 Media Foundation/DirectShow；macOS 评测 AVFoundation/VideoToolbox；RTSP/文件可评测 FFmpeg。但编码支持、硬件解码能力和特定摄像头协议须逐设备测试。FFmpeg 具体二进制的构建配置影响许可证，不能随意复制开发机已有构建到安装包。
 
-## 当前本机页面和接口
+## 预览与配置（后续界面）
 
-- 绑定 `127.0.0.1`，随机端口、每次启动随机令牌；令牌来自启动输出，API 请求使用 `X-Campura-Token`。页面不加载外部资源。
-- `GET /api/status`：运行状态、错误原因、设置、累计人数、队列人数、有效性。`eta_minutes` 永远为 `null`。
-- `GET /api/frame`：仅本机页面预览的当前 BMP 画面，不写文件。未来商家端发现接口不应开放该画面。
-- `POST /api/config`：保存归一化坐标中的计数线、排队多边形和任务开关；运行中禁止改动。
-- `POST /api/start`、`POST /api/stop`：手动启停。页面不承担身份认证或商家归属验证，因此只用于原型。
+1. 选择视频源，显示设备/权限/格式诊断和实时性。
+2. 预览可用时绘制归一化坐标计数线、方向、排队多边形与遮挡区域；保存对应分辨率/旋转信息。
+3. 场景未选择时，将来由视觉模型提出“队伍 / 全店 / 无法确认”，商家确认可见区域与用途。低置信度不自动启用总 ETA。
+4. 选择进出计数、队伍人数、空间占用任务；人数、累计进出与 ETA 分开。
+5. 若只有收银台可见，只显示这一段。仅检测到店内人数不授权推断成交。
+6. 无可用预览时说明具体原因，不能用黑屏表示“零人”；无新观测超过 TTL 时停止相关 ETA。
 
-未来稳定版应使用版本化 `/v1/capabilities`、`/v1/health`、`/v1/results`；结果带单机位 ID、采集时间、过期时间、来源类型、质量标记、进出累计窗口和当前排队数。接口仅暴露汇总值，不返回人脸、身份、完整轨迹或视频帧。商家端与插件身份绑定和本地发现文件格式另行设计，不把当前随机端口 API 当稳定合同。
+## 可替换分析与云边界
 
-## 模型、跟踪与计算资源
+未来 `VisionProvider` 输出规范化的检测框/短时轨迹/区域计数/空间占用、观测时刻、质量与覆盖信息；`SceneProvider` 只提出布局/可见性建议；计数模块独立处理越线方向、抖动、重复穿越和会话重置。`DemandProvider` 用本店已校准的汇总客流、订单和聚合浏览量产生未来情景，不能从原始人数强行给出交易数。
 
-检测器返回人体框／脚点，跟踪器仅保留短时 ID，过线算法按上一非零侧到当前侧变化计数，队列按脚点是否处于多边形统计。遮挡、多人交错、反复徘徊、相机移动与视角畸变均需人工标注数据评估。当前背景差分不适用于这些真实场景。
+当前 `samples.py` 模拟这些下游所需字段，未伪造一个“已连接”的云适配器。ONNX Runtime 的 [Execution Providers](https://onnxruntime.ai/docs/execution-providers/) 列出 DirectML/Core ML 等可选执行后端；是否支持具体模型/算子、数据类型、OS 与硬件组合需要后续基准，不能据此宣称两平台已跑通模型。
 
-未来本机 ONNX 方案：Windows 首选 WinML／按机型确认 DirectML 与 CPU 回退；macOS 评估 CoreML、Apple Neural Engine 与 CPU 回退。解码分别评估 Media Foundation 硬解和 VideoToolbox，记录是否真的启用硬件而非假设。官方资料：[ONNX Runtime Windows](https://onnxruntime.ai/docs/get-started/with-windows.html)、[DirectML](https://onnxruntime.ai/docs/execution-providers/DirectML-ExecutionProvider.html)、[CoreML](https://onnxruntime.ai/docs/execution-providers/CoreML-ExecutionProvider.html)、[VideoToolbox](https://developer.apple.com/documentation/videotoolbox)、[Media Foundation D3D11 解码](https://learn.microsoft.com/en-us/windows/desktop/medfound/supporting-direct3d-11-video-decoding-in-media-foundation)。
+云推理也不省掉所有本机采集/解码。优先测网络摄像头子码流、硬件解码、抽帧与上传带宽。USB 相机不能直接被云服务访问；要么本机转发，要么独立边缘网关。真正稳定的低配置电脑方案要靠低端实机性能与端到端延迟数据决定。
 
-云端作为后续可选推理适配器：本机或授权网关仍须采集／解码／压缩／抽帧；只在授权范围内发送最少画面，服务端模型、短时跟踪和计数分别评测。大型视频理解模型可辅助场景说明和复核，但不能凭单次文字回答充当连续精确计数。当前代码没有云端调用。
-
-| 平台 | 正式版采集／解码候选 | 推理候选 | 打包候选 | 当前验证 |
-| --- | --- | --- | --- | --- |
-| Windows | Media Foundation 采集与设备权限检查；优先测试系统硬解，外部 FFmpeg 作为兼容方案 | WinML、DirectML 或 CPU 回退，按低配机型测 | 签名 MSI／MSIX，加卸载和升级回归 | 只有源码层跨平台设计；尚无 Windows 实机 |
-| macOS | AVFoundation 采集与权限；VideoToolbox 硬解，外部 FFmpeg 作为兼容方案 | CoreML／Apple Neural Engine 或 CPU 回退，按机型测 | 签名并公证的 `.pkg`／`.dmg` | 仅外部 FFmpeg 离线源码运行；无正式安装包 |
-
-本机 FFmpeg 原型**没有启用或验证硬件解码**。单机性能是否足够，需在目标低配电脑和实际编码格式上测试后决定。
-
-## 包装与发现
-
-第一阶段是源码运行，尚无安装包。正式版计划 Windows 签名安装包及 macOS 签名、公证安装包，均从各平台构建并运行回归。FFmpeg 可选系统原生解码替代；若发行时捆绑第三方库，必须锁定构建版本并附相应许可与通知。插件默认手动启动；退出关闭本机端口，卸载可清除配置与凭据。未来商家端仅凭带版本和能力字段的本机发现握手判断可用性，失败显示“未安装／未运行／版本不兼容／无摄像头权限”等明确状态。
+改变“禁止上传画面”前必须明确授权、数据处理地域和服务条款。当前无云 SDK、无远程地址配置、无画面上传出口。不得连接真实校园监控。默认关闭人脸识别、不跨店追踪；匿名样本只保留耗时统计。不可识别长期轨迹应在设计阶段避免产生。

@@ -12,3 +12,16 @@ local/
 *.pem
 *credentials*
 *secrets*
+*.egg-info/
+.env
+.env.*
+models/
+weights/
+checkpoints/
+recordings/
+*.pt
+*.pth
+*.onnx
+*.safetensors
+*.ckpt
+*.pdparams

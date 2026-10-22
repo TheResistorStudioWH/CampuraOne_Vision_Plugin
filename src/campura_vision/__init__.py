@@ -1,3 +1,2 @@
-"""Local-only, optional Campura One vision prototype."""
-
-__version__ = "0.1.0"
+"""Campura One optional, independent local simulation plugin."""
+__version__ = '0.2.0'
